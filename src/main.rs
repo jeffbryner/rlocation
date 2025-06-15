@@ -53,7 +53,7 @@ define_class!(
         ) {
             if let Some(loc) = locations.firstObject() {
                 let coord = unsafe { loc.coordinate() };
-                log::info!("Updated location: {}, {}", coord.latitude, coord.longitude);
+                log::info!("new geolocation: {}, {}", coord.latitude, coord.longitude);
                 let mut lock = LAST_LOCATION.write().unwrap();
   
                 *lock = Some(LastLocation {
@@ -101,19 +101,9 @@ fn main() {
         WindowType::NoMenubar);
     let mut layout = VerticalBox::new();
     let mut label_text = String::new(); 
+    let loc_label = Label::new("Unknown");    
 
-    let providers = vec![(LookupProvider::IpQuery,None)];
-    let ip_result = public_ip_address::perform_lookup_with(providers,None);
-    //println!("ip_result: {}", ip_result);
-    let ip_display = ip_result
-        .map(|response| response.to_string())
-        .unwrap_or_else(|_| "Unable to get IP address".to_string());
-    label_text.push_str(&format!("IP Address: {}", ip_display));
-    //let label = Label::new(&label_text);
-    let mut label = MultilineEntry::new();
-    label.append(&label_text);
-
-    layout.append(label, LayoutStrategy::Stretchy);    
+    // ask for location
 
     let manager = unsafe { CLLocationManager::new() };
 
@@ -126,7 +116,57 @@ fn main() {
         manager.requestAlwaysAuthorization();
         manager.requestLocation();    
     }
+
+
+    // make a call to an IP location service
+    let providers = vec![(LookupProvider::IpQuery,None)];
+    let ip_result = public_ip_address::perform_lookup_with(providers,None);
+    //println!("ip_result: {}", ip_result);
+    let ip_display = ip_result
+        .map(|response| response.to_string())
+        .unwrap_or_else(|_| "Unable to get IP address".to_string());
+    label_text.push_str(&format!("IP Address: {}", ip_display));
+    //let label = Label::new(&label_text);
+    let mut label = MultilineEntry::new();
+    label.append(&label_text);
+    
+
+    // Update the label with the apple location data if it's available
+    let mut location_text = String::new();
+    if let Ok(location_guard) = LAST_LOCATION.read() {
+        if let Some(location) = *location_guard {
+            location_text = format!("\nLatitude: {:.6}\nLongitude: {:.6}", 
+                location.latitude, location.longitude);
+        } else {
+            location_text = "\nLocation: Not available yet".to_string();
+        }
+    }
+
+    label.append(&location_text);
+    layout.append(label, LayoutStrategy::Stretchy);    
+    layout.append(loc_label.clone(), LayoutStrategy::Stretchy);
+
     win.set_child(layout);
     win.show();
-    ui.main();
+//    ui.main();
+    let mut event_loop = ui.event_loop();
+    event_loop.on_tick({
+        let mut win = win.clone();
+        let mut loc_label = loc_label.clone();
+        move || {
+            win.set_title("rlocation");
+            let mut location_text = String::new();
+            if let Ok(location_guard) = LAST_LOCATION.read() {
+                if let Some(location) = *location_guard {
+                    location_text = format!("\nLatitude: {:.6}\nLongitude: {:.6}", 
+                        location.latitude, location.longitude);
+                } else {
+                    location_text = "\nLocation: Not available yet".to_string();
+                }
+            }
+
+            loc_label.set_text(&location_text);
+            }
+    });
+    event_loop.run();
 }
