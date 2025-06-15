@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>wifiscanner</string> <!-- Replace with your actual executable name -->
+    <key>CFBundleIdentifier</key>
+    <string>com.company.wifiscanner</string> <!-- Make this unique -->
+    <key>CFBundleName</key>
+    <string>WiFiScanner</string> <!-- Your application's name -->
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string> <!-- Set your target minimum macOS version -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This application needs access to your location to discover and display Wi-Fi network names (SSIDs) and BSSIDs.</string>
+</dict>
+</plist>
