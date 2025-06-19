@@ -8,13 +8,19 @@ use log::{LevelFilter, error, info};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
 use objc2::{AllocAnyThread, define_class, msg_send};
+use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
 use objc2_core_location::{
     CLAuthorizationStatus, CLLocation, CLLocationManager, CLLocationManagerDelegate,
 };
 use objc2_foundation::{MainThreadMarker, NSArray, NSObjectProtocol};
 use once_cell::sync::Lazy;
 use oslog::OsLogger;
+use std::process;
 use std::sync::RwLock;
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 
 #[derive(Debug, Copy, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,19 +96,8 @@ fn main() {
         .init()
         .unwrap();
 
-    let ui = UI::init().expect("Couldn't initialize UI library");
-
-    let mut win = Window::new(&ui, "rlocation", 300, 200, WindowType::NoMenubar);
-    let mut layout = VerticalBox::new();
-    let mut label_text = String::new();
-    let loc_label = Label::new("Unknown");
-
-    // ask for location
-
+    // Set up location manager without UI
     let manager = unsafe { CLLocationManager::new() };
-
-    info!("Location manager started");
-
     unsafe {
         let delegate: &ProtocolObject<dyn CLLocationManagerDelegate> =
             ProtocolObject::from_ref(&**LOCATION_DELEGATE);
@@ -111,60 +106,36 @@ fn main() {
         manager.requestLocation();
     }
 
-    // make a call to an IP location service
+    // Get IP address
     let providers = vec![(LookupProvider::IpQuery, None)];
     let ip_result = public_ip_address::perform_lookup_with(providers, None);
-    //println!("ip_result: {}", ip_result);
     let ip_display = ip_result
         .map(|response| response.to_string())
         .unwrap_or_else(|_| "Unable to get IP address".to_string());
-    label_text.push_str(&format!("IP Address: {}", ip_display));
-    //let label = Label::new(&label_text);
-    let mut label = MultilineEntry::new();
-    label.append(&label_text);
 
-    // Update the label with the apple location data if it's available
-    let mut location_text = String::new();
-    if let Ok(location_guard) = LAST_LOCATION.read() {
-        if let Some(location) = *location_guard {
-            location_text = format!(
-                "\nLatitude: {:.6}\nLongitude: {:.6}",
-                location.latitude, location.longitude
-            );
-        } else {
-            location_text = "\nLocation: Not available yet".to_string();
+    info!("IP Address: {}", ip_display);
+
+    // Poll for location updates with 5-second timeout
+    let start_time = Instant::now();
+    let timeout = Duration::from_secs(15);
+
+    // Poll for location updates
+    loop {
+        thread::sleep(Duration::from_millis(500));
+
+        if let Ok(location_guard) = LAST_LOCATION.read() {
+            if let Some(location) = *location_guard {
+                info!("Latitude: {:.6}", location.latitude);
+                info!("Longitude: {:.6}", location.longitude);
+                break;
+            }
+        }
+        // Check if timeout has been reached
+        if start_time.elapsed() >= timeout {
+            info!("Location request timed out");
+            break;
         }
     }
 
-    label.append(&location_text);
-    layout.append(label, LayoutStrategy::Stretchy);
-    layout.append(loc_label.clone(), LayoutStrategy::Stretchy);
-
-    win.set_child(layout);
-    win.show();
-    //    ui.main();
-    let mut event_loop = ui.event_loop();
-    event_loop.on_tick({
-        let mut win = win.clone();
-        let mut loc_label = loc_label.clone();
-        let ui = ui.clone();
-        move || {
-            win.set_title("rlocation");
-            let mut location_text = String::new();
-            if let Ok(location_guard) = LAST_LOCATION.read() {
-                if let Some(location) = *location_guard {
-                    location_text = format!(
-                        "\nLatitude: {:.6}\nLongitude: {:.6}",
-                        location.latitude, location.longitude
-                    );
-                    ui.quit();
-                } else {
-                    location_text = "\nLocation: Not available yet".to_string();
-                }
-            }
-
-            loc_label.set_text(&location_text);
-        }
-    });
-    event_loop.run();
+    process::exit(0);
 }

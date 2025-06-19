@@ -16,5 +16,7 @@
     <string>10.15</string> <!-- Set your target minimum macOS version -->
     <key>NSLocationUsageDescription</key>
     <string>This application needs access to your location to discover and display Wi-Fi network names (SSIDs) and BSSIDs.</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
 </dict>
 </plist>
