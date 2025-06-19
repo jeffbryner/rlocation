@@ -92,7 +92,6 @@ fn main() {
         .category_level_filter("Settings", LevelFilter::Trace)
         .init()
         .unwrap();    
-    embed_plist::embed_info_plist!("../Info.plist");    
 
     let ui = UI::init()
         .expect("Couldn't initialize UI library");
@@ -160,6 +159,7 @@ fn main() {
                 if let Some(location) = *location_guard {
                     location_text = format!("\nLatitude: {:.6}\nLongitude: {:.6}", 
                         location.latitude, location.longitude);
+                    
                 } else {
                     location_text = "\nLocation: Not available yet".to_string();
                 }
