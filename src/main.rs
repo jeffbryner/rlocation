@@ -1,9 +1,5 @@
-extern crate libui;
-use libui::controls::*;
-use libui::prelude::*;
-use public_ip_address::lookup::LookupProvider;
-//use std::net::{IpAddr, Ipv4Addr};
-
+use cacao::appkit::window::Window;
+use cacao::appkit::{App, AppDelegate};
 use log::{LevelFilter, error, info};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
@@ -15,12 +11,9 @@ use objc2_core_location::{
 use objc2_foundation::{MainThreadMarker, NSArray, NSObjectProtocol};
 use once_cell::sync::Lazy;
 use oslog::OsLogger;
-use std::process;
+use public_ip_address::lookup::LookupProvider;
 use std::sync::RwLock;
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::{thread, time::Duration};
 
 #[derive(Debug, Copy, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,11 +57,15 @@ define_class!(
                     longitude: coord.longitude,
                 });
             }
+            let app = NSApplication::sharedApplication(MainThreadMarker::new().unwrap());
+            unsafe { app.terminate(None) };
         }
 
         #[unsafe(method(locationManager:didFailWithError:))]
         fn did_fail_with_error(&self, _manager: &CLLocationManager, _error: &AnyObject) {
-            error!("Location manager failed with error");
+            error!("Location manager failed with error, terminating");
+            let app = NSApplication::sharedApplication(MainThreadMarker::new().unwrap());
+            unsafe { app.terminate(None) };
         }
     }
 
@@ -89,6 +86,27 @@ static LOCATION_DELEGATE: Lazy<Retained<MyLocationDelegate>> =
 // Main-thread-only CLLocationManager holder
 static mut LOCATION_MANAGER: Option<Retained<CLLocationManager>> = None;
 
+#[derive(Default)]
+struct BasicApp {
+    window: Window,
+}
+
+impl AppDelegate for BasicApp {
+    fn did_finish_launching(&self) {
+        App::activate();
+
+        self.window.set_minimum_content_size(400., 400.);
+        self.window.set_title("rlocation");
+
+        // hide app from displaying in the dock
+        let app = NSApplication::sharedApplication(MainThreadMarker::new().unwrap());
+        app.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+    }
+    fn should_terminate_after_last_window_closed(&self) -> bool {
+        true
+    }
+}
+
 fn main() {
     OsLogger::new("rlocation")
         .level_filter(LevelFilter::Debug)
@@ -96,7 +114,7 @@ fn main() {
         .init()
         .unwrap();
 
-    // Set up location manager without UI
+    // Set up location manager
     let manager = unsafe { CLLocationManager::new() };
     unsafe {
         let delegate: &ProtocolObject<dyn CLLocationManagerDelegate> =
@@ -107,35 +125,22 @@ fn main() {
     }
 
     // Get IP address
-    let providers = vec![(LookupProvider::IpQuery, None)];
-    let ip_result = public_ip_address::perform_lookup_with(providers, None);
-    let ip_display = ip_result
-        .map(|response| response.to_string())
-        .unwrap_or_else(|_| "Unable to get IP address".to_string());
+    // let providers = vec![(LookupProvider::IpQuery, None)];
+    // let ip_result = public_ip_address::perform_lookup_with(providers, None);
+    // let ip_display = ip_result
+    //     .map(|response| response.to_string())
+    //     .unwrap_or_else(|_| "Unable to get IP address".to_string());
 
-    info!("IP Address: {}", ip_display);
+    // info!("IP Address: {}", ip_display);
 
-    // Poll for location updates with 5-second timeout
-    let start_time = Instant::now();
-    let timeout = Duration::from_secs(15);
+    // Start a timer thread to terminate the app after 30 seconds
+    thread::spawn(|| {
+        thread::sleep(Duration::from_secs(30));
+        info!("30 second timeout reached, terminating app");
+        let app = NSApplication::sharedApplication(MainThreadMarker::new().unwrap());
+        unsafe { app.terminate(None) };
+    });
 
-    // Poll for location updates
-    loop {
-        thread::sleep(Duration::from_millis(500));
-
-        if let Ok(location_guard) = LAST_LOCATION.read() {
-            if let Some(location) = *location_guard {
-                info!("Latitude: {:.6}", location.latitude);
-                info!("Longitude: {:.6}", location.longitude);
-                break;
-            }
-        }
-        // Check if timeout has been reached
-        if start_time.elapsed() >= timeout {
-            info!("Location request timed out");
-            break;
-        }
-    }
-
-    process::exit(0);
+    // let app and delegates run to get location and terminate
+    App::new("com.test.window", BasicApp::default()).run();
 }
